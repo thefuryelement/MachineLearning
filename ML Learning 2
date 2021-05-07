@@ -1,0 +1,102 @@
+from cvxopt import matrix
+
+def make_matrices():
+    # YOUR CODE HERE
+    P = matrix(np.diag([1,1]), tc='d') 
+    q = matrix(np.array([1/4,1]).reshape(-1,1), tc='d')
+    G = matrix(np.array([[-1,1],[-1,-3],[-3,-5],[1/2,4]]), tc='d')
+    h = matrix(np.array([0,-15,-40,50]).reshape(-1,1), tc='d')    
+    return P,q,G,h
+    raise NotImplementedError()
+    
+    
+from cvxopt import solvers
+
+def compute_solution_and_objective(P,q,G,h):
+    # YOUR CODE HERE
+    sol = solvers.qp(P, q, G, h)
+    return sol['x'], sol['primal objective']
+    raise NotImplementedError()
+    
+
+import matplotlib.pyplot as plt
+def plot_solution(sol):
+    # YOUR CODE HERE
+    x = np.linspace(0, 15, 50)
+    y = np.linspace(-2, 15, 50)
+    X, Y = np.meshgrid(x, y)
+    F0 = X * X / 8 - Y * Y / 10 + X / 4 + Y
+    plt.xlabel(r'$x$')
+    plt.ylabel(r'$y$')
+    plt.axhline(0.0)
+    plt.axvline(0.0)
+    plt.contour(X, Y, F0, 50)
+    plt.plot(x, x, 'r')
+    plt.plot(x, 5 - x / 3, 'b')
+    plt.plot(x, (40 - 3 * x) / 5, 'g')
+    plt.plot(x, (100 - x) / 8, 'y')
+    plt.plot(sol[0], sol[1], color = 'red', marker = '.', markersize = 20)
+    plt.colorbar()
+    plt.axis('scaled')
+    return plt.show()
+    raise NotImplementedError()
+    
+# Just run the following code, do not modify it
+
+P,q,G,h = make_matrices()
+sol, obj = compute_solution_and_objective(P,q,G,h)
+plot_solution(sol)
+print(sol, obj)
+
+
+def make_X_prime(X,t):
+    # YOUR CODE HERE
+    t = t.reshape(-1, 1).astype(float)
+    X_prime = t * X
+    return X_prime
+    
+def make_H_k(X,t, kernel_function, param):
+    # YOUR CODE HERE
+    x = make_X_prime(X, t)
+    return kernel_function(x, np.transpose(x), param=param)
+    
+def setup_optimization_soft_k(X,t,C, kernel_function, param):
+    # YOUR CODE HERE
+    m, n = X.shape
+    H = make_H_k(X, t, kernel_function, param)
+    t = t.reshape(-1, 1).astype(float)
+    
+    P = matrix(H)
+    q = matrix(-np.ones((m, 1)))
+    G = matrix(np.concatenate((-np.eye(m), np.eye(m)), axis=0))
+    h = matrix(np.concatenate((np.zeros((m,1)), np.full((m,1), C)), axis=0))
+    A = matrix(t.reshape(1, -1))
+    b = matrix(np.zeros(1))
+    return P,q,G,h,A,b
+    
+    
+def compute_support_vectors(X,t,alphas):
+    support_ids = (alphas > 1e-4).flatten()
+    support_vectors = X[support_ids]
+    support_targets = t[support_ids]
+    support_alphas = alphas[support_ids]
+    return support_vectors,support_targets,support_alphas, support_ids
+    
+def train_slmkc(X, t, C, kernel_function, param):
+    P, q, G, h, A, b = setup_optimization(X,t)
+
+    #Setting solver parameters (change default to decrease tolerance) 
+    solvers.options['show_progress'] = False
+    solvers.options['abstol'] = 1e-10
+    solvers.options['reltol'] = 1e-10
+    solvers.options['feastol'] = 1e-10
+
+    #Run solver
+    solution_dict = solvers.qp(P, q, G, h, A, b)
+    alphas = np.array(solution_dict['x'])
+    
+    support_vectors,support_targets,support_alphas, support_ids = compute_support_vectors(X,t,alphas)
+
+    return support_vectors,support_targets,support_alphas, support_ids
+    
+
